@@ -1,6 +1,5 @@
-/data/
 /__pycache__/
-/sample/
-/plots/
-/plots_modes/
-/sample_modes/
+/data*/
+/plots*/
+/sample*/
+/predictions*

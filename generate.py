@@ -30,7 +30,13 @@ def writer(stack, path, header):
     return table
 
 
-def write_catalogs(root, masks):
+MACHINE_COLUMNS = (
+    "machine_id", "name", "category", "drive_type", "cooling",
+    "criticality", "active_fields",
+)
+
+
+def write_catalogs(root, specs, masks):
     with ExitStack() as stack:
         assets = writer(stack, root / "machines.csv", ("machine_id", "kind"))
         observers = writer(stack, root / "observers.csv",
@@ -44,7 +50,7 @@ def write_catalogs(root, masks):
                                     "|".join(spec.fields[i] for i in fields)))
 
 
-def write_partition(root, part, start, count, masks, rng):
+def write_partition(root, part, start, count, specs, masks, rng):
     suffix = f"part-{part:05d}.csv"
     paths = []
     anomalous = observer_offset = 0
@@ -82,6 +88,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--machines", type=int, default=len(MACHINE_TYPES),
+                        help="number of machines; types are cycled")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--steps", type=int)
     mode.add_argument("--target-bytes", type=int)
@@ -89,6 +97,8 @@ def main():
     limit = args.steps if args.steps is not None else args.target_bytes
     if limit <= 0:
         parser.error("the requested limit must be positive")
+    if args.machines <= 0:
+        parser.error("--machines must be positive")
     if args.output.exists():
         parser.error("output directory already exists")
     args.output.mkdir(parents=True)
@@ -98,12 +108,15 @@ def main():
     configuration_rng = random.Random(args.seed)
     masks = [observer_fields(spec, configuration_rng) for spec in EQUIPMENT]
     rng = random.Random(args.seed + 1)
-    write_catalogs(args.output, masks)
+    write_catalogs(args.output, specs, masks)
     size = sum(path.stat().st_size for path in args.output.glob("*.csv"))
     step = part = anomalous = 0
+    n_observers = args.machines * 3
     while True:
         count = PART_STEPS if args.steps is None else min(PART_STEPS, args.steps - step)
-        part_size, part_anomalies = write_partition(args.output, part, step, count, masks, rng)
+        part_size, part_anomalies = write_partition(
+            args.output, part, step, count, specs, masks, rng
+        )
         size += part_size
         anomalous += part_anomalies
         step += count
